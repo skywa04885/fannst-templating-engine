@@ -16,10 +16,17 @@ ADD_LIBRARY(
 		src/prepare.src.hpp
 )
 
+ADD_LIBRARY(
+		errors
+
+		src/errors.src.cpp
+		src/errors.src.hpp
+)
+
 ADD_EXECUTABLE(
 		${PROJECT_NAME}
 
 		test.cpp
 )
 
-TARGET_LINK_LIBRARIES(${PROJECT_NAME} lexer prepare)
+TARGET_LINK_LIBRARIES(${PROJECT_NAME} lexer prepare errors)

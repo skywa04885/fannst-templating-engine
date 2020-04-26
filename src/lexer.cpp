@@ -179,7 +179,7 @@ namespace Fannst::TemplatingEngine
 	    return -1;
     }
 
-    int useCommand(const std::vector<LexPart> &parts, char **result, std::map<const char *, TemplateVariable> &variables)
+    int useCommand(const std::vector<LexPart> &parts, char **result, std::map<const char *, TemplateVariable> &variables, TemplateErrorLog &log)
     {
         int rc = 0;
 
@@ -196,22 +196,31 @@ namespace Fannst::TemplatingEngine
 	            if (getVariableFromMap(parts.at(2).l_Content, variables, &var))
                 {
 	                // Sets the error message
-                    *result = const_cast<char *>("<span style=\"color:#ff1212;background-color:rgba(255,0,0,0.2);\">"
-                                                 "<strong>FTE</strong> -&gt; "
-                                                 "( Undefined Variable )"
-                                                 "</span>");
+	                log.t_TotalErrors++;
+	                log.t_Errors.emplace_back(TemplateError{
+	                    "Variable not defined !"
+	                });
+
+	                // Returns the error message
+                    generateHtmlError("Syntax Error", "Undefined Variable", result);
 
 	                // ----
 	                // Prints the console error, and finishes
 	                // ----
 
-	                std::cerr << "Variable [" << parts.at(2).l_Content << "] was not found in map !" << std::endl;
 	                rc = -1;
 	                goto UC_End;
                 }
 
+	            // Prepares the data, so it is html acceptable
+	            char *ret = nullptr;
+                makeTextHTML5Tolerant(reinterpret_cast<char *>(const_cast<void *>(var->t_Val)), &ret);
+
 	            // Inserts the variable
-	            *result = reinterpret_cast<char *>(const_cast<void *>(var->t_Val));
+	            *result = ret;
+
+	            // Sets the return code to -1, so we need to free memory
+	            rc = -1;
             }
         } else if (parts.at(0).l_LexType == LexType::LT_MODE_FUNC)
         {
@@ -382,11 +391,11 @@ namespace Fannst::TemplatingEngine
 		return rc;
 	}
 
-    int render(const char *filename, std::map<const char *, TemplateVariable> &variables, char **ret)
+    int render(const char *filename, std::map<const char *, TemplateVariable> &variables, char **ret, TemplateErrorLog &log)
     {
 	    char *buffer = reinterpret_cast<char *>(malloc(1024));
 	    char *file = reinterpret_cast<char *>(malloc(1));
-	    std::size_t fileLen = 1, i, retSize;
+	    std::size_t fileLen = 1, i, retSize, buffSize;
 	    *(&file[0]) = '\0';
 
 	    // ----
@@ -394,7 +403,7 @@ namespace Fannst::TemplatingEngine
 	    // ----
 
 	    // Opens the file
-	    FILE *fp = fopen(filename, "r");
+	    FILE *fp = fopen(filename, "rt");
 
 	    // Starts reading
 	    while (fgets(&buffer[0], 1024, fp) != nullptr)
@@ -402,9 +411,13 @@ namespace Fannst::TemplatingEngine
 	        // Checks how much whitespace o remove
 	        i = 0;
             for (const char *c = &buffer[0]; (*c == ' ' || *c == '\t') && *c != '\0'; c++) i++;
+            // Gets the buffer size
+            buffSize = strlen(&buffer[0]);
+            // Removes the '\n'
+            if (buffer[buffSize-1] == '\n') buffer[buffSize-1] = '\0';
 
 	        // Adds the length of the buffer, to the fileLen
-            fileLen += strlen(&buffer[0]) - i;
+            fileLen += buffSize - i;
 
 	        // Resize the buffer
 	        file = reinterpret_cast<char *>(realloc(&file[0], fileLen));
@@ -412,6 +425,10 @@ namespace Fannst::TemplatingEngine
 	        // Concat the buffer
 	        strcat(&file[0], &buffer[i]);
         }
+
+	    // ----
+	    // Starts removing the '\r\n'
+	    // ----
 
 	    // ----
 	    // Performs the analysis
@@ -428,6 +445,7 @@ namespace Fannst::TemplatingEngine
 
         std::vector<LexPart> tempParts{};
         retSize = 1;
+        int ucRet;
         *ret = reinterpret_cast<char *>(malloc(retSize));
         *(&(*ret)[0]) = '\0';
         for (auto &a : resultVec)
@@ -445,7 +463,7 @@ namespace Fannst::TemplatingEngine
                 // Performs the analysis
                 uint8_t stat = performLexicalAnalysisCommand(&a.l_Content, tempParts);
                 // Executes the command
-                useCommand(tempParts, &result, variables);
+                ucRet = useCommand(tempParts, &result, variables, log);
 
                 // ----
                 // Concatenates the data
@@ -461,6 +479,11 @@ namespace Fannst::TemplatingEngine
                 // ----
                 // Frees the memory
                 // ----
+
+                if (ucRet == -1)
+                {
+                    free(result);
+                }
 
                 // Clears the temp parts
                 for (LexPart &l : tempParts)
@@ -491,5 +514,7 @@ namespace Fannst::TemplatingEngine
         // Free's the char pointers
         free(buffer);
         free(file);
+
+        return 0;
     }
 }

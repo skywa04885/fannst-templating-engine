@@ -6,6 +6,9 @@
 #include <malloc.h>
 #include <map>
 
+#include "errors.src.hpp"
+#include "prepare.src.hpp"
+
 using namespace std;
 
 namespace Fannst::TemplatingEngine
@@ -57,9 +60,9 @@ namespace Fannst::TemplatingEngine
 
     int performLexicalAnalysis(const char *raw, std::vector<LexPart> &result);
 
-    int useCommand(const std::vector<LexPart> &parts, char **result, std::map<const char *, TemplateVariable> &variables);
+    int useCommand(const std::vector<LexPart> &parts, char **result, std::map<const char *, TemplateVariable> &variables, TemplateErrorLog &log);
 
-	int render(const char *filename, std::map<const char *, TemplateVariable> &variables, char **ret);
+	int render(const char *filename, std::map<const char *, TemplateVariable> &variables, char **ret, TemplateErrorLog &log);
 
     int getVariableFromMap(const char *key, std::map<const char *, TemplateVariable> &map, TemplateVariable **target);
 }
