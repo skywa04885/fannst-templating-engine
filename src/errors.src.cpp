@@ -18,7 +18,8 @@ namespace Fannst::TemplatingEngine
         // ----
 
         // Allocates the memory based on the ret size
-        *ret = reinterpret_cast<char *>(malloc(strlen(&title[0]) + strlen(&title[0]) + 256 + 1));
+        *ret = reinterpret_cast<char *>(malloc(
+                strlen(&title[0]) + strlen(&title[0]) + 256 + 1));
         // Sets the null termination char
         *(&(*ret)[0]) = '\0';
 

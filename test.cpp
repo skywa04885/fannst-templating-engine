@@ -12,12 +12,17 @@ int main(int argc, char **argv)
 {
     TemplateErrorLog log{};
     const char *title = "Hello & WOrld !";
+    bool a = false;
 
     char *test = nullptr;
     std::map<const char *, TemplateVariable> p{
         std::make_pair("title", TemplateVariable{
             TvType::TV_CHAR_POINTER,
             reinterpret_cast<const void *>(title),
+        }),
+        std::make_pair("bool", TemplateVariable{
+                TvType::TV_BOOL,
+                reinterpret_cast<const void *>(&a),
         })
     };
     render("../test.html", p, &test, log);

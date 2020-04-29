@@ -11,6 +11,10 @@
 
 using namespace std;
 
+#define PIC_SP_FLAG     0b00000001      // Flag for special flag check
+#define PIC_SCM_FLAG    0b00000010      // Flag to indicate heap allocation should be freed
+#define PIC_ERR_FLAG    0b00000100      // The flag for an possible error
+
 namespace Fannst::TemplatingEngine
 {
 	typedef enum
@@ -60,7 +64,8 @@ namespace Fannst::TemplatingEngine
 
     int performLexicalAnalysis(const char *raw, std::vector<LexPart> &result);
 
-    int useCommand(const std::vector<LexPart> &parts, char **result, std::map<const char *, TemplateVariable> &variables, TemplateErrorLog &log);
+    int useCommand(const std::vector<LexPart> &parts, char **result, std::map<const char *, TemplateVariable> &variables,
+            TemplateErrorLog &log, uint8_t *flags, const char *file);
 
 	int render(const char *filename, std::map<const char *, TemplateVariable> &variables, char **ret, TemplateErrorLog &log);
 

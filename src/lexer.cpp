@@ -1,3 +1,4 @@
+#include <cmath>
 #include "lexer.hpp"
 
 namespace Fannst::TemplatingEngine
@@ -61,6 +62,37 @@ namespace Fannst::TemplatingEngine
 		bool symbolStarted = false;
 		for (char *p = &(*raw)[0]; *p != '\0'; p++)
 		{
+		    // Stores the string data
+		    if (stringStarted && *p != '"')
+            {
+		        // Appends the char
+                *(&buffer[bufferLen]) = *p;
+		        // Increments the buffer len
+                bufferLen++;
+                // SKips further commands
+		        continue;
+            } else if (stringStarted)
+            {
+                // Sets the null termination char
+                *(&buffer[bufferLen]) = '\0';
+                // Allocate the memory for the copy
+                char *t = reinterpret_cast<char *>(malloc(bufferLen + 1));
+                // Copies the memory
+                memcpy(&t[0], &buffer[0], bufferLen + 1);
+                // Pushes it to the result
+                result.emplace_back(LexPart{
+                        LexType::LT_STRING,
+                        &t[0]
+                });
+                // Resets the buffer
+                bufferLen = 0;
+                *(&buffer[0]) = '\0';
+                // Ends the symbol
+                stringStarted = false;
+                // Skips
+                continue;
+            }
+
 		    // Performs the symbol stuff
             if (symbolStarted && isalpha(*p) != 0)
             { // It is an valid symbol
@@ -179,7 +211,8 @@ namespace Fannst::TemplatingEngine
 	    return -1;
     }
 
-    int useCommand(const std::vector<LexPart> &parts, char **result, std::map<const char *, TemplateVariable> &variables, TemplateErrorLog &log)
+    int useCommand(const std::vector<LexPart> &parts, char **result, std::map<const char *, TemplateVariable> &variables,
+            TemplateErrorLog &log, uint8_t *flags, const char *file)
     {
         int rc = 0;
 
@@ -195,36 +228,135 @@ namespace Fannst::TemplatingEngine
                 // Gets the variable names
 	            if (getVariableFromMap(parts.at(2).l_Content, variables, &var))
                 {
-	                // Sets the error message
+                    *flags |= PIC_SCM_FLAG;
+
 	                log.t_TotalErrors++;
 	                log.t_Errors.emplace_back(TemplateError{
 	                    "Variable not defined !"
 	                });
 
-	                // Returns the error message
                     generateHtmlError("Syntax Error", "Undefined Variable", result);
 
-	                // ----
-	                // Prints the console error, and finishes
-	                // ----
-
-	                rc = -1;
 	                goto UC_End;
                 }
 
-	            // Prepares the data, so it is html acceptable
-	            char *ret = nullptr;
-                makeTextHTML5Tolerant(reinterpret_cast<char *>(const_cast<void *>(var->t_Val)), &ret);
+	            // ----
+	            // Checks the variable type
+	            // ----
 
-	            // Inserts the variable
-	            *result = ret;
+	            switch (var->t_Type)
+                {
+                    case TV_NONE:
+                    {
+                        *flags |= PIC_SCM_FLAG;
 
-	            // Sets the return code to -1, so we need to free memory
-	            rc = -1;
+                        log.t_TotalErrors++;
+                        log.t_Errors.emplace_back(TemplateError{
+                                "Invalid variable type supplied !"
+                        });
+
+                        generateHtmlError("Pre-Compile Error", "Invalid variable type !", result);
+
+                        goto UC_End;
+                    }
+                    case TV_BOOL:
+                    {
+                        *result = (*reinterpret_cast<const bool *>(var->t_Val) ?
+                                   const_cast<char *>("True") : const_cast<char *>("False"));
+                        break;
+                    }
+                    case TV_CHAR_POINTER:
+                    {
+                        *flags |= PIC_SCM_FLAG;
+
+                        char *ret = nullptr;
+                        makeTextHTML5Tolerant(reinterpret_cast<char *>(const_cast<void *>(var->t_Val)), &ret);
+
+                        *result = ret;
+                        break;
+                    }
+                    case TV_INT:
+                    {
+                        *flags |= PIC_SCM_FLAG;
+
+                        char *ret = reinterpret_cast<char *>(malloc(24));
+                        sprintf(&ret[0], "%d", *reinterpret_cast<const int *>(var->t_Val));
+
+                        *result = ret;
+                        break;
+                    }
+                    case TV_DOUBLE:
+                    {
+                        *flags |= PIC_SCM_FLAG;
+
+                        char *ret = reinterpret_cast<char *>(malloc(36));
+                        sprintf(&ret[0], "%f", *reinterpret_cast<const double *>(var->t_Val));
+
+                        *result = ret;
+                        break;
+                    }
+                    case TV_FLOAT:
+                    {
+                        *flags |= PIC_SCM_FLAG;
+
+                        char *ret = reinterpret_cast<char *>(malloc(36));
+                        sprintf(&ret[0], "%f", *reinterpret_cast<const float *>(var->t_Val));
+
+                        *result = ret;
+                        break;
+                    }
+                }
             }
-        } else if (parts.at(0).l_LexType == LexType::LT_MODE_FUNC)
+        } else if (parts.at(0).l_LexType == LexType::LT_MODE_INSERT_HTML)
         {
+	        // Checks if it is an include command ( Insert other template )
+	        if (parts.at(1).l_LexType == LexType::LT_NAME && strcmp(
+	                parts.at(1).l_Content, "include") == 0)
+            {
+                char *basePath = nullptr;
 
+	            // ----
+	            // Parses the base path of the filename
+	            // ----
+
+	            std::size_t fileNamePos, fileNameLen;
+
+	            // Gets the string length of the file name
+	            fileNameLen = strlen(&file[0]);
+	            // Sets the default position to the max len of the file
+	            fileNamePos = fileNameLen;
+
+	            // Loops over all the chars, in reverse
+	            for (const char *c = &file[fileNameLen]; fileNamePos >= 0 && *c != '/'; fileNamePos-- && c--)
+	                continue;
+	            // Adds one more char to the index
+	            fileNamePos++;
+
+	            // Allocates the memory for the base path, with the file name
+                basePath = reinterpret_cast<char *>(malloc(fileNamePos + strlen(&parts.at(2).l_Content[0]) + 1));
+                // Sets the null term char
+                basePath[fileNamePos - 1] = '\0';
+                // Copies the string
+                memcpy(&basePath[0], &file[0], fileNamePos);
+                // Concat's the filename
+                strcat(&basePath[0], &parts.at(2).l_Content[0]);
+
+                // ----
+                // Renders the file
+                // ----
+
+                // Sets the free flag
+                *flags |= PIC_SCM_FLAG;
+
+                // Renders the file
+                render(&basePath[0], variables, result, log);
+
+	            // ----
+	            // Free's the memory
+	            // ----
+
+	            free(basePath);
+            }
         } else if (parts.at(0).l_LexType == LexType::LT_MODE_INSERT_HTML)
         {
 
@@ -310,7 +442,7 @@ namespace Fannst::TemplatingEngine
 			{
 				// Allocates the memory for the command itself
 				char *contentPtr = reinterpret_cast<char *>(malloc(bufferLen + 1));
-				*(&contentPtr[bufferLen]) = '\0';
+				*(&contentPtr[bufferLen - 2]) = '\0';
 
 				// Copies the memory
 				memcpy(&contentPtr[0], &buffer[1], bufferLen - 2);
@@ -395,7 +527,7 @@ namespace Fannst::TemplatingEngine
     {
 	    char *buffer = reinterpret_cast<char *>(malloc(1024));
 	    char *file = reinterpret_cast<char *>(malloc(1));
-	    std::size_t fileLen = 1, i, retSize, buffSize;
+	    std::size_t fileLen = 1, i, retSize, buffSize, maxLineLen, tempSize;
 	    *(&file[0]) = '\0';
 
 	    // ----
@@ -404,6 +536,23 @@ namespace Fannst::TemplatingEngine
 
 	    // Opens the file
 	    FILE *fp = fopen(filename, "rt");
+
+	    // Checks if the file is open
+	    if (fp == nullptr)
+        {
+	        // Prints the error
+            perror("Failed reading file: ");
+
+            // Generates the html error
+            generateHtmlError("Could not read template !", filename, ret);
+
+            // Free's the char pointers
+            free(buffer);
+            free(file);
+
+            // Returns
+            return 0;
+        }
 
 	    // Starts reading
 	    while (fgets(&buffer[0], 1024, fp) != nullptr)
@@ -439,12 +588,18 @@ namespace Fannst::TemplatingEngine
 	    // Performs the analysis
 	    performLexicalAnalysis(file, resultVec);
 
+	    for (auto &a : resultVec)
+        {
+	        std::cout << a.l_LexType << ": " << a.l_Content << std::endl;
+        }
+
 	    // ----
 	    // Executes the command
 	    // ----
 
         std::vector<LexPart> tempParts{};
         retSize = 1;
+        maxLineLen = 0;
         int ucRet;
         *ret = reinterpret_cast<char *>(malloc(retSize));
         *(&(*ret)[0]) = '\0';
@@ -453,6 +608,7 @@ namespace Fannst::TemplatingEngine
             if (a.l_LexType == LexType::LT_COMMAND)
             {
                 char *result = nullptr;
+                uint8_t flags = 0x0;
 
                 // ----
                 // Prepares the data
@@ -463,24 +619,32 @@ namespace Fannst::TemplatingEngine
                 // Performs the analysis
                 uint8_t stat = performLexicalAnalysisCommand(&a.l_Content, tempParts);
                 // Executes the command
-                ucRet = useCommand(tempParts, &result, variables, log);
+                ucRet = useCommand(tempParts, &result, variables, log, &flags, filename);
 
                 // ----
-                // Concatenates the data
+                // Concats the data
                 // ----
+
+                // Gets the temp size
+                if (!result) continue; // TODO: Remove if not debug
+                std::cout << result << std::endl;
+                tempSize = strlen(&result[0]);
 
                 // Sets the new buffer size
-                retSize += strlen(&result[0]);
+                retSize += tempSize;
                 // Performs the re-allocation
                 *ret = reinterpret_cast<char *>(realloc(&(*ret)[0], retSize));
                 // Concatenates the result
                 strcat(&(*ret)[0], &result[0]);
 
+                // Adds the max line length
+                maxLineLen += tempSize;
+
                 // ----
                 // Frees the memory
                 // ----
 
-                if (ucRet == -1)
+                if ((flags & PIC_SCM_FLAG) == PIC_SCM_FLAG)
                 {
                     free(result);
                 }
