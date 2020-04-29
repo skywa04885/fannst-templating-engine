@@ -588,11 +588,6 @@ namespace Fannst::TemplatingEngine
 	    // Performs the analysis
 	    performLexicalAnalysis(file, resultVec);
 
-	    for (auto &a : resultVec)
-        {
-	        std::cout << a.l_LexType << ": " << a.l_Content << std::endl;
-        }
-
 	    // ----
 	    // Executes the command
 	    // ----
@@ -627,7 +622,6 @@ namespace Fannst::TemplatingEngine
 
                 // Gets the temp size
                 if (!result) continue; // TODO: Remove if not debug
-                std::cout << result << std::endl;
                 tempSize = strlen(&result[0]);
 
                 // Sets the new buffer size
