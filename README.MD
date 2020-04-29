@@ -39,10 +39,21 @@ manner: ```{%: labelName | if $bool %}```
 
 #### If statement
 
-```
+```html
 {%: shouldShowParagraph | if $bool %}
     <p>{%= $text %}</p>
 {%: shouldShowParagraph | endif %}
+```
+
+#### Includes from other files
+```html
+<body>
+    {%- include "nav.html" %}
+    <div class="container">
+        {%= $title %}
+    </div>
+    {%- include "footer.html" %}
+</body>
 ```
 
 ## Variable Insertions
